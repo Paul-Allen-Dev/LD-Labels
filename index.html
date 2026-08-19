@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Loading Doses — Label Editor</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:      #0f1117;
+    --surface: #1a1d27;
+    --border:  #2a2d3e;
+    --accent:  #C4203D;
+    --text:    #e8eaf0;
+    --muted:   #6b7280;
+    --danger:  #ef4444;
+    --radius:  12px;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem 4rem;
+  }
+  .header { text-align: center; margin-bottom: 2.5rem; }
+  .header-logo { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 0.5rem; }
+  .logo-bar { width: 6px; height: 32px; background: var(--accent); border-radius: 3px; }
+  .header h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+  .header p { color: var(--muted); font-size: 0.85rem; margin-top: 0.3rem; }
+  .badge {
+    display: inline-block; background: rgba(196,32,61,0.15); color: var(--accent);
+    border: 1px solid rgba(196,32,61,0.3); border-radius: 20px;
+    font-size: 0.7rem; font-weight: 700; padding: 2px 9px; margin-left: 8px; vertical-align: middle;
+    letter-spacing: 0.05em;
+  }
+  .workspace {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 1120px;
+    align-items: start;
+  }
+  @media (max-width: 800px) { .workspace { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 1.2rem;
+  }
+  .panel-title {
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--accent);
+    margin-bottom: 1.2rem; padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .field { margin-bottom: 1.1rem; }
+  .field label { display: block; font-size: 0.78rem; font-weight: 500; color: var(--muted); margin-bottom: 0.4rem; }
+  .field input, .field select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); font-size: 0.9rem;
+    padding: 10px 12px; outline: none; transition: border-color 0.2s; font-family: inherit;
+    appearance: none;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.1rem; }
+  .field-row .field { margin-bottom: 0; }
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .toggle-row:last-of-type { border-bottom: none; }
+  .toggle-label { font-size: 0.82rem; display: flex; align-items: center; gap: 8px; }
+  .toggle { position: relative; width: 40px; height: 22px; cursor: pointer; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; inset: 0; background: var(--border); border-radius: 22px; transition: background 0.2s; }
+  .slider::before {
+    content: ''; position: absolute; width: 16px; height: 16px;
+    left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform 0.2s;
+  }
+  .toggle input:checked + .slider { background: var(--accent); }
+  .toggle input:checked + .slider::before { transform: translateX(18px); }
+  .btn {
+    width: 100%; padding: 13px; border: none; border-radius: 8px;
+    font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    transition: all 0.2s; margin-top: 0.6rem; font-family: inherit;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #a71b35; transform: translateY(-1px); }
+  .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .divider { height: 1px; background: var(--border); margin: 1.2rem 0; }
+  .info-note {
+    font-size: 0.75rem; color: var(--muted); line-height: 1.55;
+    background: var(--bg); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 6px;
+    padding: 8px 12px; margin-top: 0.9rem;
+  }
+  .dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--accent); flex-shrink: 0;
+  }
+  /* Batch */
+  .batch-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 1rem; max-height: 180px; overflow-y: auto; }
+  .batch-item {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font-size: 0.82rem;
+  }
+  .batch-item span { flex: 1; }
+  .batch-item button { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 1rem; padding: 0 4px; }
+  .batch-add-row { display: flex; gap: 8px; }
+  .batch-add-row input {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-size: 0.85rem; padding: 8px 10px; outline: none; font-family: inherit;
+  }
+  .batch-add-row input:focus { border-color: var(--accent); }
+  .batch-add-row button {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 8px 14px; font-weight: 700; cursor: pointer; font-size: 1rem;
+  }
+  /* Preview */
+  .preview-panel { position: sticky; top: 1rem; }
+  .preview-box {
+    background: #222; border-radius: var(--radius); padding: 2.5rem 2rem;
+    display: flex; align-items: center; justify-content: center; min-height: 240px;
+    margin-bottom: 1rem;
+  }
+  canvas#preview {
+    display: block; image-rendering: crisp-edges; border-radius: 4px;
+    max-width: 100%; height: auto; box-shadow: 0 6px 32px rgba(0,0,0,0.6);
+  }
+  .specs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; }
+  .spec-badge {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 10px; font-size: 0.72rem; color: var(--muted); font-family: monospace;
+  }
+  .spec-badge span { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">
+    <div class="logo-bar"></div>
+    <h1>Loading Doses — Label Editor <span class="badge">40×20mm</span></h1>
+    <div class="logo-bar"></div>
+  </div>
+  <p>Niimbot M2 · 40 × 20 mm labels · Dosage pill · Batch no. · Storage temp</p>
+</div>
+
+<div class="workspace">
+  <div>
+
+    <!-- Label Content -->
+    <div class="panel">
+      <div class="panel-title">Label Content</div>
+
+      <div class="field">
+        <label>Product / Peptide Name</label>
+        <input type="text" id="peptideName" value="Retatrutide" placeholder="e.g. BPC-157" maxlength="28"/>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Dosage</label>
+          <input type="text" id="dosage" value="20mg" placeholder="e.g. 10mg" maxlength="12"/>
+        </div>
+        <div class="field">
+          <label>Pill Colour</label>
+          <select id="pillColor">
+            <option value="#ffffff">White — holographic surface (thermal ✓)</option>
+            <option value="#000000">Black — solid print (thermal ✓)</option>
+            <option value="#C4203D">Red — screen/inkjet only</option>
+            <option value="#22c55e">Green — screen/inkjet only</option>
+            <option value="#f97316">Orange — screen/inkjet only</option>
+            <option value="#3b82f6">Blue — screen/inkjet only</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Brand Line</label>
+        <input type="text" id="brandLine" value="LOADING DOSES" maxlength="28"/>
+      </div>
+
+      <div class="field">
+        <label>Disclaimer</label>
+        <input type="text" id="disclaimer" value="FOR RESEARCH USE ONLY" maxlength="36"/>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Batch No. <span id="batchNoHint" style="color:var(--accent);font-weight:600">(auto)</span></label>
+          <input type="text" id="batchNo" value="" placeholder="Auto-generated on export" maxlength="18" style="opacity:0.45;pointer-events:none"/>
+        </div>
+        <div class="field">
+          <label>Storage</label>
+          <input type="text" id="storage" value="2°C–8°C" placeholder="e.g. 2°C–8°C" maxlength="14"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Label Style -->
+    <div class="panel">
+      <div class="panel-title">Label Style</div>
+      <div class="field" style="margin-bottom:0.4rem">
+        <select id="labelStyle">
+          <option value="classic">Classic — stripe, pill right-anchored, 3 rows</option>
+          <option value="centered">Centered — symmetric, no stripe</option>
+          <option value="left">Left-Aligned — utility, largest name</option>
+          <option value="ruled">Ruled Frame — inner border + brand mark</option>
+        </select>
+      </div>
+      <div class="info-note">Pick a style, then compare — all four export the same way. <strong>Left accent stripe</strong> below only applies to Classic; the other three ignore it and use the full width instead.</div>
+    </div>
+
+    <!-- Style -->
+    <div class="panel">
+      <div class="panel-title">Style Options</div>
+
+      <div class="toggle-row">
+        <span class="toggle-label"><span class="dot" style="background:var(--accent)"></span>Left accent stripe</span>
+        <label class="toggle"><input type="checkbox" id="showAccent" checked onchange="render()"/><span class="slider"></span></label>
+      </div>
+      <div class="field" style="margin-top:0.7rem;margin-bottom:0.5rem">
+        <label>Stripe Colour</label>
+        <select id="stripeColor">
+          <option value="#ffffff">White — holographic strip (thermal ✓)</option>
+          <option value="#000000">Black — invisible on black bg (removes stripe)</option>
+          <option value="#C4203D">Red — screen/inkjet only</option>
+        </select>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Show dosage pill</span>
+        <label class="toggle"><input type="checkbox" id="showPill" checked onchange="render()"/><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Show divider rules</span>
+        <label class="toggle"><input type="checkbox" id="showRules" checked onchange="render()"/><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Black background (inverted)</span>
+        <label class="toggle"><input type="checkbox" id="invertMode" checked onchange="render()"/><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Auto-generate batch no. on export</span>
+        <label class="toggle"><input type="checkbox" id="autoBatch" checked onchange="toggleAutoBatch()"/><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Thermal sharpen on download <span style="font-size:0.72rem;color:var(--muted)">(strips anti-alias grey)</span></span>
+        <label class="toggle"><input type="checkbox" id="thermalSharpen" checked/><span class="slider"></span></label>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field">
+        <label>Product Name Font Size (0 = auto)</label>
+        <input type="number" id="nameFontSize" value="0" min="0" max="320" step="2"/>
+      </div>
+      <div class="field">
+        <label>Brand Font Size (0 = auto)</label>
+        <input type="number" id="brandFontSize" value="0" min="0" max="220" step="2"/>
+      </div>
+      <div class="field">
+        <label>Disclaimer Font Size (0 = auto)</label>
+        <input type="number" id="disclaimerFontSize" value="0" min="0" max="180" step="2"/>
+      </div>
+
+      <button class="btn btn-primary" onclick="downloadSingle()">⬇ Download This Label</button>
+
+      <div class="info-note">
+        <strong style="color:var(--text)">Thermal printing:</strong> Niimbot M2 is monochrome — it can only print black. Colour pills will print as grey. Use <strong>White</strong> (holographic surface shows through) or <strong>Black</strong> (solid ink) for the pill on thermal labels.<br/><br/>
+        <strong style="color:var(--text)">Auto batch:</strong> Each download generates a unique <code>BN-YYMMDD-XX</code> number. Batch export gives each product its own number. Disable the toggle to use a fixed batch no. instead.
+      </div>
+    </div>
+
+    <!-- Batch Export -->
+    <div class="panel">
+      <div class="panel-title">Batch Export</div>
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.9rem">
+        Format: <strong style="color:var(--text)">Name dosage</strong> — e.g. "BPC-157 10mg".
+        Dosage is parsed automatically per entry. Batch no. and storage come from fields above.
+      </p>
+      <div class="batch-list" id="batchList"></div>
+      <div class="batch-add-row">
+        <input type="text" id="batchInput" placeholder="e.g. TB-500 10mg" maxlength="32"
+               onkeydown="if(event.key==='Enter') addBatch()"/>
+        <button onclick="addBatch()">+</button>
+      </div>
+      <button class="btn btn-secondary" onclick="downloadBatch()">⬇ Download All</button>
+    </div>
+
+  </div>
+
+  <!-- Preview panel -->
+  <div class="preview-panel">
+    <div class="panel">
+      <div class="panel-title">Live Preview</div>
+      <div class="specs">
+        <div class="spec-badge">Canvas: <span>1280 × 640 px</span></div>
+        <div class="spec-badge">Label: <span>40 × 20 mm</span></div>
+        <div class="spec-badge">Printer: <span>Niimbot M2</span></div>
+      </div>
+      <div class="preview-box">
+        <canvas id="preview" width="1280" height="640"></canvas>
+      </div>
+      <div class="info-note">
+        In Niimbot app: import PNG → stretch until the outer border meets the label edge.
+        Ratio is 2:1 — it won't distort.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const C   = document.getElementById('preview');
+const ctx = C.getContext('2d');
+const W = 1280, H = 640;
+
+function roundRect(cx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  cx.beginPath();
+  cx.moveTo(x + r, y);
+  cx.lineTo(x + w - r, y);
+  cx.quadraticCurveTo(x + w, y, x + w, y + r);
+  cx.lineTo(x + w, y + h - r);
+  cx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  cx.lineTo(x + r, y + h);
+  cx.quadraticCurveTo(x, y + h, x, y + h - r);
+  cx.lineTo(x, y + r);
+  cx.quadraticCurveTo(x, y, x + r, y);
+  cx.closePath();
+  cx.fill();
+}
+
+function pillTextColor(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return (r*0.299 + g*0.587 + b*0.114) < 140 ? '#ffffff' : '#000000';
+}
+
+function getValues() {
+  return {
+    style:      document.getElementById('labelStyle').value,
+    name:       document.getElementById('peptideName').value.trim()  || 'Peptide Name',
+    dosage:     document.getElementById('dosage').value.trim(),
+    pillColor:  document.getElementById('pillColor').value,
+    brand:      document.getElementById('brandLine').value.trim()    || 'LOADING DOSES',
+    disclaimer: document.getElementById('disclaimer').value.trim()   || 'FOR RESEARCH USE ONLY',
+    batchNo:    document.getElementById('batchNo').value.trim(),
+    storage:    document.getElementById('storage').value.trim(),
+    showAccent:  document.getElementById('showAccent').checked,
+    stripeColor: document.getElementById('stripeColor').value,
+    showPill:   document.getElementById('showPill').checked,
+    showRules:  document.getElementById('showRules').checked,
+    inverted:   document.getElementById('invertMode').checked,
+    nameFontOverride:       parseInt(document.getElementById('nameFontSize').value)       || 0,
+    brandFontOverride:      parseInt(document.getElementById('brandFontSize').value)      || 0,
+    disclaimerFontOverride: parseInt(document.getElementById('disclaimerFontSize').value) || 0,
+  };
+}
+
+// Label grew from the old 40x14mm tool to 40x20mm here — canvas width (1280px = 40mm
+// at 32px/mm) is unchanged, but height went from 448px (14mm) to 640px (20mm), a 10/7
+// factor. Row Y-positions and base font sizes below are scaled by that factor so the
+// extra height gets used as bigger text/breathing room, not dead space at the bottom.
+// Horizontal values (stripe width, padding, border) are unchanged — the label is still
+// 40mm wide.
+function drawLabel(cx, cW, cH, vals) {
+  switch (vals.style) {
+    case 'centered': return drawCentered(cx, cW, cH, vals);
+    case 'left':     return drawLeftAligned(cx, cW, cH, vals);
+    case 'ruled':    return drawRuledFrame(cx, cW, cH, vals);
+    default:         return drawClassic(cx, cW, cH, vals);
+  }
+}
+
+function drawClassic(cx, cW, cH, vals) {
+  const s    = n => Math.round(n * (cW / W));
+  const BG   = vals.inverted ? '#000000' : '#ffffff';
+  const FG   = vals.inverted ? '#ffffff' : '#000000';
+
+  // Background
+  cx.fillStyle = BG;
+  cx.fillRect(0, 0, cW, cH);
+
+  // Left accent stripe
+  const STRIPE = vals.showAccent ? s(46) : 0;
+  if (vals.showAccent) {
+    cx.fillStyle = vals.stripeColor;
+    cx.fillRect(0, 0, STRIPE, cH);
+  }
+
+  // Outer border
+  cx.strokeStyle = FG;
+  cx.lineWidth = s(7);
+  cx.strokeRect(s(4), s(4), cW - s(8), cH - s(8));
+
+  // Content offsets
+  const tx   = STRIPE + s(24);
+  const maxW = cW - tx - s(20);
+
+  // ── ROW 1: Product name + dosage pill ──────────────────────
+  const R1_TOP = s(17);
+  const R1_BOT = s(280);
+  const R1_H   = R1_BOT - R1_TOP;
+
+  // Calculate pill dimensions first (right-anchored)
+  const showPill = vals.showPill && vals.dosage.length > 0;
+  let pillW = 0, pillH = 0, pillX = 0, pillY = 0;
+
+  if (showPill) {
+    pillH = Math.round(R1_H * 0.68);
+    let pFSize = Math.round(pillH * 0.58);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > s(220) && pFSize > s(24)) {
+      pFSize -= s(3);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    pillW  = cx.measureText(vals.dosage).width + s(40);
+    pillX  = tx + maxW - pillW;
+    pillY  = R1_TOP + Math.round((R1_H - pillH) / 2);
+  }
+
+  // Auto-size product name to fit beside pill
+  const nameAvailW = maxW - (showPill ? pillW + s(20) : 0);
+  let nSize = vals.nameFontOverride > 0 ? s(vals.nameFontOverride) : s(246);
+  cx.font = `bold ${nSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.name).width > nameAvailW && nSize > s(46)) {
+    nSize -= s(4);
+    cx.font = `bold ${nSize}px Arial, sans-serif`;
+  }
+
+  cx.fillStyle    = FG;
+  cx.textAlign    = 'left';
+  cx.textBaseline = 'middle';
+  cx.fillText(vals.name, tx, R1_TOP + R1_H / 2);
+
+  // Dosage pill
+  if (showPill) {
+    cx.fillStyle = vals.pillColor;
+    roundRect(cx, pillX, pillY, pillW, pillH, s(23));
+
+    let pFSize = Math.round(pillH * 0.56);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > pillW - s(20) && pFSize > s(20)) {
+      pFSize -= s(2);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    cx.fillStyle    = pillTextColor(vals.pillColor);
+    cx.textAlign    = 'center';
+    cx.textBaseline = 'middle';
+    cx.fillText(vals.dosage, pillX + pillW / 2, pillY + pillH / 2);
+  }
+
+  // ── DIVIDER 1 ─────────────────────────────────────────────
+  const D1Y = s(289);
+  if (vals.showRules) {
+    cx.fillStyle = FG;
+    cx.fillRect(tx, D1Y, maxW, s(5));
+  }
+
+  // ── ROW 2: Brand (left) + Storage temp (right) ───────────────────────────
+  const R2Y = D1Y + s(19);
+
+  // Measure storage temp first so brand can avoid overlapping it
+  let stSize = s(89), storageW = 0;
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.storage).width > maxW * 0.36 && stSize > s(26)) {
+      stSize -= s(2);
+      cx.font = `bold ${stSize}px Arial, sans-serif`;
+    }
+    storageW = cx.measureText(vals.storage).width + s(18);
+  }
+
+  // Brand — left-aligned, constrained to not overlap storage
+  let bSize = vals.brandFontOverride > 0 ? s(vals.brandFontOverride) : s(109);
+  cx.font = `bold ${bSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.brand).width > maxW - storageW && bSize > s(26)) {
+    bSize -= s(3);
+    cx.font = `bold ${bSize}px Arial, sans-serif`;
+  }
+  cx.fillStyle    = FG;
+  cx.textAlign    = 'left';
+  cx.textBaseline = 'top';
+  cx.fillText(vals.brand, tx, R2Y);
+
+  // Storage temp — right-aligned, vertically centred within brand row
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    cx.fillStyle    = vals.inverted ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+    cx.textAlign    = 'right';
+    cx.textBaseline = 'top';
+    cx.fillText(vals.storage, tx + maxW, R2Y + Math.round((bSize - stSize) / 2));
+  }
+
+  // ── DIVIDER 2 ─────────────────────────────────────────────
+  const D2Y = s(440);
+  if (vals.showRules) {
+    cx.fillStyle = vals.inverted ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.55)';
+    cx.fillRect(tx, D2Y, maxW, s(3));
+  }
+
+  // ── ROW 3: Disclaimer (left) + Batch no. only (right) ─────────────────────
+  const R3Y = D2Y + s(16);
+
+  // Measure batch number width first so disclaimer can avoid overlapping it
+  let mSize = s(66), batchMetaW = 0;
+  if (vals.batchNo) {
+    const batchTxt = `Batch: ${vals.batchNo}`;
+    cx.font = `bold ${mSize}px Arial, sans-serif`;
+    while (cx.measureText(batchTxt).width > maxW * 0.5 && mSize > s(26)) {
+      mSize -= s(2);
+      cx.font = `bold ${mSize}px Arial, sans-serif`;
+    }
+    batchMetaW = cx.measureText(batchTxt).width + s(16);
+  }
+
+  // Disclaimer — bigger default now that storage is on the brand row
+  let dSize = vals.disclaimerFontOverride > 0 ? s(vals.disclaimerFontOverride) : s(97);
+  cx.font = `bold ${dSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.disclaimer).width > maxW - batchMetaW && dSize > s(28)) {
+    dSize -= s(3);
+    cx.font = `bold ${dSize}px Arial, sans-serif`;
+  }
+  cx.fillStyle    = FG;
+  cx.textAlign    = 'left';
+  cx.textBaseline = 'top';
+  cx.fillText(vals.disclaimer, tx, R3Y);
+
+  // Batch number only — right-aligned, vertically centred relative to disclaimer
+  if (vals.batchNo) {
+    const batchTxt = `Batch: ${vals.batchNo}`;
+    cx.font = `bold ${mSize}px Arial, sans-serif`;
+    cx.fillStyle    = vals.inverted ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+    cx.textAlign    = 'right';
+    cx.textBaseline = 'top';
+    cx.fillText(batchTxt, tx + maxW, R3Y + Math.round((dSize - mSize) / 2));
+  }
+}
+
+// Simple vial+cap glyph, drawn as flat canvas shapes (matches the site favicon mark).
+// (x,y) is the top-left of a roughly `size`-square bounding box.
+function drawVialIcon(cx, x, y, size, color) {
+  const u = size / 24;
+  cx.fillStyle = color;
+  cx.fillRect(x + 6 * u, y, 10 * u, 2 * u);
+  cx.fillRect(x + 7 * u, y + 2 * u, 8 * u, 6 * u);
+  cx.fillRect(x + 9 * u, y + 8 * u, 4 * u, 3 * u);
+  cx.fillRect(x + 6.5 * u, y + 11 * u, 9 * u, 2.5 * u);
+  cx.fillRect(x + 7 * u, y + 13 * u, 8 * u, 2 * u);
+  roundRect(cx, x + 4.5 * u, y + 15 * u, 13 * u, 8.5 * u, 2.5 * u);
+}
+
+// ── Style: Centered — symmetric stack, no stripe, name+pill grouped and centred ──
+function drawCentered(cx, cW, cH, vals) {
+  const s  = n => Math.round(n * (cW / W));
+  const BG = vals.inverted ? '#000000' : '#ffffff';
+  const FG = vals.inverted ? '#ffffff' : '#000000';
+
+  cx.fillStyle = BG;
+  cx.fillRect(0, 0, cW, cH);
+  cx.strokeStyle = FG;
+  cx.lineWidth = s(7);
+  cx.strokeRect(s(4), s(4), cW - s(8), cH - s(8));
+
+  const padX = s(40);
+  const safeW = cW - padX * 2;
+  // Estimated total block height (kicker + hero + rule + two fine lines) for a
+  // typical short label, used to vertically centre the whole stack. Approximate —
+  // unusually long brand/disclaimer text may sit slightly off-centre.
+  const estBlockH = s(445);
+  let cursorY = Math.max(s(20), Math.round((cH - estBlockH) / 2));
+
+  // Kicker (brand)
+  let kSize = s(42);
+  cx.font = `bold ${kSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.brand).width > safeW && kSize > s(20)) {
+    kSize -= s(2);
+    cx.font = `bold ${kSize}px Arial, sans-serif`;
+  }
+  cx.fillStyle = FG;
+  cx.textAlign = 'center';
+  cx.textBaseline = 'top';
+  cx.fillText(vals.brand, cW / 2, cursorY);
+  cursorY += Math.round(kSize * 1.25) + s(14);
+
+  // Hero: name + pill, grouped and centred
+  const showPill = vals.showPill && vals.dosage.length > 0;
+  const HERO_H = s(232);
+  let pillW = 0, pillH = 0;
+  if (showPill) {
+    pillH = Math.round(HERO_H * 0.62);
+    let pFSize = Math.round(pillH * 0.56);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > s(220) && pFSize > s(22)) {
+      pFSize -= s(3);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    pillW = cx.measureText(vals.dosage).width + s(36);
+  }
+  const gap = showPill ? s(18) : 0;
+  const nameMaxW = safeW - pillW - gap;
+  let nSize = vals.nameFontOverride > 0 ? s(vals.nameFontOverride) : s(200);
+  cx.font = `bold ${nSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.name).width > nameMaxW && nSize > s(44)) {
+    nSize -= s(4);
+    cx.font = `bold ${nSize}px Arial, sans-serif`;
+  }
+  const nameW  = cx.measureText(vals.name).width;
+  const groupW = nameW + gap + pillW;
+  const groupX = (cW - groupW) / 2;
+  const heroMidY = cursorY + HERO_H / 2;
+
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'middle';
+  cx.fillText(vals.name, groupX, heroMidY);
+
+  if (showPill) {
+    const pillX = groupX + nameW + gap;
+    const pillY = heroMidY - pillH / 2;
+    cx.fillStyle = vals.pillColor;
+    roundRect(cx, pillX, pillY, pillW, pillH, s(20));
+    let pFSize = Math.round(pillH * 0.54);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > pillW - s(18) && pFSize > s(18)) {
+      pFSize -= s(2);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    cx.fillStyle = pillTextColor(vals.pillColor);
+    cx.textAlign = 'center';
+    cx.textBaseline = 'middle';
+    cx.fillText(vals.dosage, pillX + pillW / 2, heroMidY);
+  }
+
+  cursorY += HERO_H + s(10);
+
+  if (vals.showRules) {
+    const ruleW = s(170);
+    cx.fillStyle = FG;
+    cx.fillRect((cW - ruleW) / 2, cursorY, ruleW, s(5));
+    cursorY += s(5) + s(14);
+  } else {
+    cursorY += s(6);
+  }
+
+  // Fine line 1: disclaimer + storage
+  const fine1 = vals.storage ? `${vals.disclaimer} · ${vals.storage}` : vals.disclaimer;
+  let fSize = vals.disclaimerFontOverride > 0 ? s(vals.disclaimerFontOverride) : s(50);
+  cx.font = `bold ${fSize}px Arial, sans-serif`;
+  while (cx.measureText(fine1).width > safeW && fSize > s(22)) {
+    fSize -= s(2);
+    cx.font = `bold ${fSize}px Arial, sans-serif`;
+  }
+  cx.fillStyle = FG;
+  cx.textAlign = 'center';
+  cx.textBaseline = 'top';
+  cx.fillText(fine1, cW / 2, cursorY);
+  cursorY += Math.round(fSize * 1.3) + s(6);
+
+  // Fine line 2: batch
+  if (vals.batchNo) {
+    const batchTxt = `Batch: ${vals.batchNo}`;
+    let mSize = s(38);
+    cx.font = `bold ${mSize}px Arial, sans-serif`;
+    while (cx.measureText(batchTxt).width > safeW && mSize > s(20)) {
+      mSize -= s(2);
+      cx.font = `bold ${mSize}px Arial, sans-serif`;
+    }
+    cx.fillStyle = vals.inverted ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+    cx.textAlign = 'center';
+    cx.textBaseline = 'top';
+    cx.fillText(batchTxt, cW / 2, cursorY);
+  }
+}
+
+// ── Style: Left-Aligned — utility convention, no stripe, name+pill grouped left ──
+function drawLeftAligned(cx, cW, cH, vals) {
+  const s  = n => Math.round(n * (cW / W));
+  const BG = vals.inverted ? '#000000' : '#ffffff';
+  const FG = vals.inverted ? '#ffffff' : '#000000';
+
+  cx.fillStyle = BG;
+  cx.fillRect(0, 0, cW, cH);
+  cx.strokeStyle = FG;
+  cx.lineWidth = s(7);
+  cx.strokeRect(s(4), s(4), cW - s(8), cH - s(8));
+
+  const padX = s(40);
+  const safeW = cW - padX * 2;
+  let cursorY = s(28);
+
+  // Kicker (brand)
+  let kSize = s(44);
+  cx.font = `bold ${kSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.brand).width > safeW && kSize > s(20)) {
+    kSize -= s(2);
+    cx.font = `bold ${kSize}px Arial, sans-serif`;
+  }
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'top';
+  cx.fillText(vals.brand, padX, cursorY);
+  cursorY += Math.round(kSize * 1.2) + s(12);
+
+  // Hero: name + pill, grouped, left-aligned
+  const showPill = vals.showPill && vals.dosage.length > 0;
+  const HERO_H = s(250);
+  let pillW = 0, pillH = 0;
+  if (showPill) {
+    pillH = Math.round(HERO_H * 0.6);
+    let pFSize = Math.round(pillH * 0.56);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > s(220) && pFSize > s(22)) {
+      pFSize -= s(3);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    pillW = cx.measureText(vals.dosage).width + s(36);
+  }
+  const gap = showPill ? s(16) : 0;
+  const nameMaxW = safeW - pillW - gap;
+  let nSize = vals.nameFontOverride > 0 ? s(vals.nameFontOverride) : s(220);
+  cx.font = `bold ${nSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.name).width > nameMaxW && nSize > s(46)) {
+    nSize -= s(4);
+    cx.font = `bold ${nSize}px Arial, sans-serif`;
+  }
+  const heroMidY = cursorY + HERO_H / 2;
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'middle';
+  cx.fillText(vals.name, padX, heroMidY);
+
+  if (showPill) {
+    const nameW = cx.measureText(vals.name).width;
+    const pillX = padX + nameW + gap;
+    const pillY = heroMidY - pillH / 2;
+    cx.fillStyle = vals.pillColor;
+    roundRect(cx, pillX, pillY, pillW, pillH, s(20));
+    let pFSize = Math.round(pillH * 0.54);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > pillW - s(18) && pFSize > s(18)) {
+      pFSize -= s(2);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    cx.fillStyle = pillTextColor(vals.pillColor);
+    cx.textAlign = 'center';
+    cx.textBaseline = 'middle';
+    cx.fillText(vals.dosage, pillX + pillW / 2, heroMidY);
+  }
+
+  cursorY += HERO_H + s(14);
+
+  if (vals.showRules) {
+    cx.fillStyle = FG;
+    cx.fillRect(padX, cursorY, safeW, s(4));
+    cursorY += s(4) + s(14);
+  } else {
+    cursorY += s(8);
+  }
+
+  // Fine row 1: disclaimer (left) + storage (right)
+  let stSize = s(52), storageW = 0;
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.storage).width > safeW * 0.34 && stSize > s(24)) {
+      stSize -= s(2);
+      cx.font = `bold ${stSize}px Arial, sans-serif`;
+    }
+    storageW = cx.measureText(vals.storage).width + s(16);
+  }
+  let dSize = vals.disclaimerFontOverride > 0 ? s(vals.disclaimerFontOverride) : s(56);
+  cx.font = `bold ${dSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.disclaimer).width > safeW - storageW && dSize > s(24)) {
+    dSize -= s(2);
+    cx.font = `bold ${dSize}px Arial, sans-serif`;
+  }
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'top';
+  cx.fillText(vals.disclaimer, padX, cursorY);
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    cx.fillStyle = vals.inverted ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+    cx.textAlign = 'right';
+    cx.textBaseline = 'top';
+    cx.fillText(vals.storage, padX + safeW, cursorY + Math.round((dSize - stSize) / 2));
+  }
+  cursorY += Math.round(dSize * 1.25) + s(10);
+
+  // Fine row 2: batch
+  if (vals.batchNo) {
+    const batchTxt = `Batch: ${vals.batchNo}`;
+    let mSize = s(40);
+    cx.font = `bold ${mSize}px Arial, sans-serif`;
+    while (cx.measureText(batchTxt).width > safeW && mSize > s(20)) {
+      mSize -= s(2);
+      cx.font = `bold ${mSize}px Arial, sans-serif`;
+    }
+    cx.fillStyle = vals.inverted ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+    cx.textAlign = 'left';
+    cx.textBaseline = 'top';
+    cx.fillText(batchTxt, padX, cursorY);
+  }
+}
+
+// ── Style: Ruled Frame — inner border rule + small vial glyph beside the brand ──
+function drawRuledFrame(cx, cW, cH, vals) {
+  const s  = n => Math.round(n * (cW / W));
+  const BG = vals.inverted ? '#000000' : '#ffffff';
+  const FG = vals.inverted ? '#ffffff' : '#000000';
+
+  cx.fillStyle = BG;
+  cx.fillRect(0, 0, cW, cH);
+  cx.strokeStyle = FG;
+  cx.lineWidth = s(7);
+  cx.strokeRect(s(4), s(4), cW - s(8), cH - s(8));
+  cx.lineWidth = s(3);
+  cx.strokeRect(s(16), s(16), cW - s(32), cH - s(32));
+
+  const padX = s(36);
+  const safeW = cW - padX * 2;
+  let cursorY = s(32);
+
+  // Kicker with icon
+  const iconSize = s(38);
+  drawVialIcon(cx, padX, cursorY, iconSize, FG);
+  let kSize = s(40);
+  const kickerX = padX + iconSize + s(12);
+  const kickerMaxW = safeW - iconSize - s(12);
+  cx.font = `bold ${kSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.brand).width > kickerMaxW && kSize > s(18)) {
+    kSize -= s(2);
+    cx.font = `bold ${kSize}px Arial, sans-serif`;
+  }
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'middle';
+  cx.fillText(vals.brand, kickerX, cursorY + iconSize / 2);
+  cursorY += iconSize + s(16);
+
+  // Hero: name + pill
+  const showPill = vals.showPill && vals.dosage.length > 0;
+  const HERO_H = s(220);
+  let pillW = 0, pillH = 0;
+  if (showPill) {
+    pillH = Math.round(HERO_H * 0.6);
+    let pFSize = Math.round(pillH * 0.56);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > s(200) && pFSize > s(20)) {
+      pFSize -= s(3);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    pillW = cx.measureText(vals.dosage).width + s(32);
+  }
+  const gap = showPill ? s(16) : 0;
+  const nameMaxW = safeW - pillW - gap;
+  let nSize = vals.nameFontOverride > 0 ? s(vals.nameFontOverride) : s(190);
+  cx.font = `bold ${nSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.name).width > nameMaxW && nSize > s(42)) {
+    nSize -= s(4);
+    cx.font = `bold ${nSize}px Arial, sans-serif`;
+  }
+  const heroMidY = cursorY + HERO_H / 2;
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'middle';
+  cx.fillText(vals.name, padX, heroMidY);
+
+  if (showPill) {
+    const nameW = cx.measureText(vals.name).width;
+    const pillX = padX + nameW + gap;
+    const pillY = heroMidY - pillH / 2;
+    cx.fillStyle = vals.pillColor;
+    roundRect(cx, pillX, pillY, pillW, pillH, s(18));
+    let pFSize = Math.round(pillH * 0.54);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > pillW - s(16) && pFSize > s(16)) {
+      pFSize -= s(2);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    cx.fillStyle = pillTextColor(vals.pillColor);
+    cx.textAlign = 'center';
+    cx.textBaseline = 'middle';
+    cx.fillText(vals.dosage, pillX + pillW / 2, heroMidY);
+  }
+
+  cursorY += HERO_H + s(10);
+
+  if (vals.showRules) {
+    cx.fillStyle = FG;
+    cx.globalAlpha = 0.55;
+    cx.fillRect(padX, cursorY, safeW, s(4));
+    cx.globalAlpha = 1;
+    cursorY += s(4) + s(12);
+  } else {
+    cursorY += s(6);
+  }
+
+  // Fine row 1: disclaimer + storage
+  let stSize = s(46), storageW = 0;
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.storage).width > safeW * 0.34 && stSize > s(22)) {
+      stSize -= s(2);
+      cx.font = `bold ${stSize}px Arial, sans-serif`;
+    }
+    storageW = cx.measureText(vals.storage).width + s(14);
+  }
+  let dSize = vals.disclaimerFontOverride > 0 ? s(vals.disclaimerFontOverride) : s(48);
+  cx.font = `bold ${dSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.disclaimer).width > safeW - storageW && dSize > s(22)) {
+    dSize -= s(2);
+    cx.font = `bold ${dSize}px Arial, sans-serif`;
+  }
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'top';
+  cx.fillText(vals.disclaimer, padX, cursorY);
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    cx.fillStyle = vals.inverted ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+    cx.textAlign = 'right';
+    cx.textBaseline = 'top';
+    cx.fillText(vals.storage, padX + safeW, cursorY + Math.round((dSize - stSize) / 2));
+  }
+  cursorY += Math.round(dSize * 1.25) + s(8);
+
+  // Fine row 2: batch
+  if (vals.batchNo) {
+    const batchTxt = `Batch: ${vals.batchNo}`;
+    let mSize = s(36);
+    cx.font = `bold ${mSize}px Arial, sans-serif`;
+    while (cx.measureText(batchTxt).width > safeW && mSize > s(18)) {
+      mSize -= s(2);
+      cx.font = `bold ${mSize}px Arial, sans-serif`;
+    }
+    cx.fillStyle = vals.inverted ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+    cx.textAlign = 'left';
+    cx.textBaseline = 'top';
+    cx.fillText(batchTxt, padX, cursorY);
+  }
+}
+
+// Converts every pixel to pure black or white — strips anti-aliased grey fringes
+// so thermal printer gets clean binary input instead of dithering grey blobs.
+function binarizeCanvas(canvas) {
+  const cx = canvas.getContext('2d');
+  const id = cx.getImageData(0, 0, canvas.width, canvas.height);
+  const d  = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
+    const v   = lum >= 128 ? 255 : 0;
+    d[i] = d[i+1] = d[i+2] = v;
+    d[i+3] = 255;
+  }
+  cx.putImageData(id, 0, 0);
+}
+
+function randomBatch() {
+  const now = new Date();
+  const yy  = String(now.getFullYear()).slice(2);
+  const mm  = String(now.getMonth() + 1).padStart(2, '0');
+  const dd  = String(now.getDate()).padStart(2, '0');
+  const rnd = String(Math.floor(Math.random() * 90) + 10); // 10–99
+  return `BN-${yy}${mm}${dd}-${rnd}`;
+}
+
+function toggleAutoBatch() {
+  const auto  = document.getElementById('autoBatch').checked;
+  const field = document.getElementById('batchNo');
+  const hint  = document.getElementById('batchNoHint');
+  field.style.opacity        = auto ? '0.45' : '1';
+  field.style.pointerEvents  = auto ? 'none' : 'auto';
+  field.placeholder          = auto ? 'Auto-generated on export' : 'e.g. BN-001';
+  hint.style.display         = auto ? 'inline' : 'none';
+  render();
+}
+
+function render() {
+  const vals = getValues();
+  // Preview shows a sample batch number when auto mode is on
+  if (document.getElementById('autoBatch').checked) {
+    vals.batchNo = 'BN-' + new Date().toISOString().slice(2,8).replace(/-/g,'') + '-' + '47';
+  }
+  ctx.clearRect(0, 0, W, H);
+  drawLabel(ctx, W, H, vals);
+}
+
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+function exportBlob(vals, filename, blob) {
+  const url = URL.createObjectURL(blob);
+  if (isIOS) {
+    // iOS Safari: open PNG in overlay — user long-presses to save to Photos
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      padding:2rem;gap:1.5rem;`;
+    const hint = document.createElement('p');
+    hint.style.cssText = 'color:#fff;font-size:1rem;font-weight:600;text-align:center;line-height:1.6;margin:0';
+    hint.textContent = 'Hold the image below → Save to Photos → open Niimbot app → import → print';
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.cssText = 'max-width:100%;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.6)';
+    const close = document.createElement('button');
+    close.textContent = '✕  Close';
+    close.style.cssText = `
+      background:transparent;border:1px solid rgba(255,255,255,0.3);color:#fff;
+      border-radius:8px;padding:10px 24px;font-size:0.9rem;cursor:pointer;font-family:inherit`;
+    close.onclick = () => { document.body.removeChild(overlay); URL.revokeObjectURL(url); };
+    overlay.appendChild(hint);
+    overlay.appendChild(img);
+    overlay.appendChild(close);
+    document.body.appendChild(overlay);
+  } else {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
+
+function downloadSingle() {
+  const vals = getValues();
+  if (document.getElementById('autoBatch').checked) {
+    vals.batchNo = randomBatch();
+  }
+  const filename = `loadingdoses_${vals.name.replace(/[^a-z0-9]/gi,'_').toLowerCase()}_${vals.dosage.replace(/\s/g,'')}.png`;
+  const off = new OffscreenCanvas(W, H);
+  drawLabel(off.getContext('2d'), W, H, vals);
+  if (document.getElementById('thermalSharpen').checked) binarizeCanvas(off);
+  off.convertToBlob({ type: 'image/png' }).then(blob => exportBlob(vals, filename, blob));
+}
+
+// Batch — format "ProductName dosage" e.g. "BPC-157 10mg"
+let batchItems = [
+  'BPC-157 10mg',
+  'TB-500 10mg',
+  'GHK-Cu 100mg',
+  'KPV 10mg',
+  'Selank 10mg',
+  'Semax 10mg',
+  'NAD+ 1000mg',
+];
+
+const DOSAGE_RE = /^(.+?)\s+(\d[\d.]*\s*(?:mg|ml|mcg|µg|iu|g))\s*$/i;
+
+function renderBatchList() {
+  document.getElementById('batchList').innerHTML = batchItems.map((n, i) => `
+    <div class="batch-item">
+      <span>${n}</span>
+      <button onclick="removeBatch(${i})">✕</button>
+    </div>`).join('');
+}
+
+function addBatch() {
+  const inp = document.getElementById('batchInput');
+  const val = inp.value.trim();
+  if (val && !batchItems.includes(val)) { batchItems.push(val); renderBatchList(); }
+  inp.value = '';
+  inp.focus();
+}
+
+function removeBatch(i) { batchItems.splice(i, 1); renderBatchList(); }
+
+async function downloadBatch() {
+  const base    = getValues();
+  const autoB   = document.getElementById('autoBatch').checked;
+  for (const entry of batchItems) {
+    const match  = entry.match(DOSAGE_RE);
+    const name   = match ? match[1].trim() : entry;
+    const dosage = match ? match[2].trim() : base.dosage;
+    const batchNo = autoB ? randomBatch() : base.batchNo;
+    const vals   = { ...base, name, dosage, batchNo };
+
+    const off  = new OffscreenCanvas(W, H);
+    drawLabel(off.getContext('2d'), W, H, vals);
+    if (document.getElementById('thermalSharpen').checked) binarizeCanvas(off);
+    const filename = `loadingdoses_${name.replace(/[^a-z0-9]/gi,'_').toLowerCase()}_${dosage.replace(/\s/g,'')}.png`;
+    const blob = await off.convertToBlob({ type: 'image/png' });
+    exportBlob(vals, filename, blob);
+    await new Promise(r => setTimeout(r, isIOS ? 1200 : 380));
+  }
+}
+
+document.querySelectorAll('input[type=text], input[type=number], select').forEach(el =>
+  el.addEventListener('input', render));
+
+renderBatchList();
+render();
+</script>
+</body>
+</html>
