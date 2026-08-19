@@ -241,6 +241,10 @@
         <label class="toggle"><input type="checkbox" id="showPill" checked onchange="render()"/><span class="slider"></span></label>
       </div>
       <div class="toggle-row">
+        <span class="toggle-label">Pill border <span style="font-size:0.72rem;color:var(--muted)">(outline so it reads as a badge even when fill matches background)</span></span>
+        <label class="toggle"><input type="checkbox" id="pillBorder" checked onchange="render()"/><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
         <span class="toggle-label">Show divider rules</span>
         <label class="toggle"><input type="checkbox" id="showRules" checked onchange="render()"/><span class="slider"></span></label>
       </div>
@@ -270,6 +274,10 @@
       <div class="field">
         <label>Disclaimer Font Size (0 = auto)</label>
         <input type="number" id="disclaimerFontSize" value="0" min="0" max="180" step="2"/>
+      </div>
+      <div class="field">
+        <label>Storage / Batch Font Size (0 = auto) <span style="font-size:0.72rem;color:var(--muted)">— bumps both the temp and batch line</span></label>
+        <input type="number" id="metaFontSize" value="0" min="0" max="140" step="2"/>
       </div>
 
       <button class="btn btn-primary" onclick="downloadSingle()">⬇ Download This Label</button>
@@ -324,7 +332,7 @@ const C   = document.getElementById('preview');
 const ctx = C.getContext('2d');
 const W = 1280, H = 640;
 
-function roundRect(cx, x, y, w, h, r) {
+function roundRectPath(cx, x, y, w, h, r) {
   r = Math.min(r, w / 2, h / 2);
   cx.beginPath();
   cx.moveTo(x + r, y);
@@ -337,7 +345,21 @@ function roundRect(cx, x, y, w, h, r) {
   cx.lineTo(x, y + r);
   cx.quadraticCurveTo(x, y, x + r, y);
   cx.closePath();
+}
+
+function roundRect(cx, x, y, w, h, r) {
+  roundRectPath(cx, x, y, w, h, r);
   cx.fill();
+}
+
+// Outlines the pill in FG ink regardless of fill colour — keeps it reading as a
+// distinct badge even when the fill matches the background (e.g. a white pill on
+// a non-inverted white label, which prints with no visible edge otherwise).
+function strokePill(cx, x, y, w, h, r, color, lineWidth) {
+  cx.strokeStyle = color;
+  cx.lineWidth = lineWidth;
+  roundRectPath(cx, x, y, w, h, r);
+  cx.stroke();
 }
 
 function pillTextColor(hex) {
@@ -360,11 +382,13 @@ function getValues() {
     showAccent:  document.getElementById('showAccent').checked,
     stripeColor: document.getElementById('stripeColor').value,
     showPill:   document.getElementById('showPill').checked,
+    pillBorder: document.getElementById('pillBorder').checked,
     showRules:  document.getElementById('showRules').checked,
     inverted:   document.getElementById('invertMode').checked,
     nameFontOverride:       parseInt(document.getElementById('nameFontSize').value)       || 0,
     brandFontOverride:      parseInt(document.getElementById('brandFontSize').value)      || 0,
     disclaimerFontOverride: parseInt(document.getElementById('disclaimerFontSize').value) || 0,
+    metaFontOverride:       parseInt(document.getElementById('metaFontSize').value)       || 0,
   };
 }
 
@@ -448,6 +472,7 @@ function drawClassic(cx, cW, cH, vals) {
   if (showPill) {
     cx.fillStyle = vals.pillColor;
     roundRect(cx, pillX, pillY, pillW, pillH, s(23));
+    if (vals.pillBorder) strokePill(cx, pillX, pillY, pillW, pillH, s(23), FG, s(4));
 
     let pFSize = Math.round(pillH * 0.56);
     cx.font = `bold ${pFSize}px Arial, sans-serif`;
@@ -472,7 +497,7 @@ function drawClassic(cx, cW, cH, vals) {
   const R2Y = D1Y + s(19);
 
   // Measure storage temp first so brand can avoid overlapping it
-  let stSize = s(89), storageW = 0;
+  let stSize = vals.metaFontOverride > 0 ? s(vals.metaFontOverride) : s(89), storageW = 0;
   if (vals.storage) {
     cx.font = `bold ${stSize}px Arial, sans-serif`;
     while (cx.measureText(vals.storage).width > maxW * 0.36 && stSize > s(26)) {
@@ -514,7 +539,7 @@ function drawClassic(cx, cW, cH, vals) {
   const R3Y = D2Y + s(16);
 
   // Measure batch number width first so disclaimer can avoid overlapping it
-  let mSize = s(66), batchMetaW = 0;
+  let mSize = vals.metaFontOverride > 0 ? s(vals.metaFontOverride) : s(66), batchMetaW = 0;
   if (vals.batchNo) {
     const batchTxt = `Batch: ${vals.batchNo}`;
     cx.font = `bold ${mSize}px Arial, sans-serif`;
@@ -631,6 +656,7 @@ function drawCentered(cx, cW, cH, vals) {
     const pillY = heroMidY - pillH / 2;
     cx.fillStyle = vals.pillColor;
     roundRect(cx, pillX, pillY, pillW, pillH, s(20));
+    if (vals.pillBorder) strokePill(cx, pillX, pillY, pillW, pillH, s(20), FG, s(4));
     let pFSize = Math.round(pillH * 0.54);
     cx.font = `bold ${pFSize}px Arial, sans-serif`;
     while (cx.measureText(vals.dosage).width > pillW - s(18) && pFSize > s(18)) {
@@ -654,7 +680,9 @@ function drawCentered(cx, cW, cH, vals) {
     cursorY += s(6);
   }
 
-  // Fine line 1: disclaimer + storage
+  // Fine line 1: disclaimer + storage, sharing one size (sized via the Disclaimer
+  // Font Size field — the two are merged into a single line in this style, unlike
+  // the other three where storage gets its own field).
   const fine1 = vals.storage ? `${vals.disclaimer} · ${vals.storage}` : vals.disclaimer;
   let fSize = vals.disclaimerFontOverride > 0 ? s(vals.disclaimerFontOverride) : s(50);
   cx.font = `bold ${fSize}px Arial, sans-serif`;
@@ -671,7 +699,7 @@ function drawCentered(cx, cW, cH, vals) {
   // Fine line 2: batch
   if (vals.batchNo) {
     const batchTxt = `Batch: ${vals.batchNo}`;
-    let mSize = s(38);
+    let mSize = vals.metaFontOverride > 0 ? s(vals.metaFontOverride) : s(38);
     cx.font = `bold ${mSize}px Arial, sans-serif`;
     while (cx.measureText(batchTxt).width > safeW && mSize > s(20)) {
       mSize -= s(2);
@@ -747,6 +775,7 @@ function drawLeftAligned(cx, cW, cH, vals) {
     const pillY = heroMidY - pillH / 2;
     cx.fillStyle = vals.pillColor;
     roundRect(cx, pillX, pillY, pillW, pillH, s(20));
+    if (vals.pillBorder) strokePill(cx, pillX, pillY, pillW, pillH, s(20), FG, s(4));
     let pFSize = Math.round(pillH * 0.54);
     cx.font = `bold ${pFSize}px Arial, sans-serif`;
     while (cx.measureText(vals.dosage).width > pillW - s(18) && pFSize > s(18)) {
@@ -770,7 +799,7 @@ function drawLeftAligned(cx, cW, cH, vals) {
   }
 
   // Fine row 1: disclaimer (left) + storage (right)
-  let stSize = s(52), storageW = 0;
+  let stSize = vals.metaFontOverride > 0 ? s(vals.metaFontOverride) : s(52), storageW = 0;
   if (vals.storage) {
     cx.font = `bold ${stSize}px Arial, sans-serif`;
     while (cx.measureText(vals.storage).width > safeW * 0.34 && stSize > s(24)) {
@@ -801,7 +830,7 @@ function drawLeftAligned(cx, cW, cH, vals) {
   // Fine row 2: batch
   if (vals.batchNo) {
     const batchTxt = `Batch: ${vals.batchNo}`;
-    let mSize = s(40);
+    let mSize = vals.metaFontOverride > 0 ? s(vals.metaFontOverride) : s(40);
     cx.font = `bold ${mSize}px Arial, sans-serif`;
     while (cx.measureText(batchTxt).width > safeW && mSize > s(20)) {
       mSize -= s(2);
@@ -832,10 +861,10 @@ function drawRuledFrame(cx, cW, cH, vals) {
   const safeW = cW - padX * 2;
   let cursorY = s(32);
 
-  // Kicker with icon
-  const iconSize = s(38);
+  // Kicker with icon — sized up so the glyph doesn't disappear at print size
+  const iconSize = s(60);
   drawVialIcon(cx, padX, cursorY, iconSize, FG);
-  let kSize = s(40);
+  let kSize = s(56);
   const kickerX = padX + iconSize + s(12);
   const kickerMaxW = safeW - iconSize - s(12);
   cx.font = `bold ${kSize}px Arial, sans-serif`;
@@ -883,6 +912,7 @@ function drawRuledFrame(cx, cW, cH, vals) {
     const pillY = heroMidY - pillH / 2;
     cx.fillStyle = vals.pillColor;
     roundRect(cx, pillX, pillY, pillW, pillH, s(18));
+    if (vals.pillBorder) strokePill(cx, pillX, pillY, pillW, pillH, s(18), FG, s(4));
     let pFSize = Math.round(pillH * 0.54);
     cx.font = `bold ${pFSize}px Arial, sans-serif`;
     while (cx.measureText(vals.dosage).width > pillW - s(16) && pFSize > s(16)) {
@@ -908,7 +938,7 @@ function drawRuledFrame(cx, cW, cH, vals) {
   }
 
   // Fine row 1: disclaimer + storage
-  let stSize = s(46), storageW = 0;
+  let stSize = vals.metaFontOverride > 0 ? s(vals.metaFontOverride) : s(46), storageW = 0;
   if (vals.storage) {
     cx.font = `bold ${stSize}px Arial, sans-serif`;
     while (cx.measureText(vals.storage).width > safeW * 0.34 && stSize > s(22)) {
@@ -939,7 +969,7 @@ function drawRuledFrame(cx, cW, cH, vals) {
   // Fine row 2: batch
   if (vals.batchNo) {
     const batchTxt = `Batch: ${vals.batchNo}`;
-    let mSize = s(36);
+    let mSize = vals.metaFontOverride > 0 ? s(vals.metaFontOverride) : s(36);
     cx.font = `bold ${mSize}px Arial, sans-serif`;
     while (cx.measureText(batchTxt).width > safeW && mSize > s(18)) {
       mSize -= s(2);
