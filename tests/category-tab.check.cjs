@@ -134,6 +134,29 @@ check('original six styles render identically to the live version', async (page,
   await base.close();
 });
 
+// ── Batch export ─────────────────────────────────────────────
+
+// Runs downloadBatch with exportBlob stubbed out, returning the tab word of each label.
+async function batchTabs(page, categoryTab) {
+  return page.evaluate(async categoryTab => {
+    const seen = [];
+    window.exportBlob = vals => seen.push(tabWordFor(vals));
+    batchItems = ['BPC-157 10mg', 'Semax 10mg', 'Retatrutide 20mg', 'BAC Water 10ml'];
+    document.getElementById('labelStyle').value = 'cattab';
+    document.getElementById('categoryTab').value = categoryTab;
+    await downloadBatch();
+    return seen;
+  }, categoryTab);
+}
+
+check('batch export resolves each entry on its own, ignoring a forced word', async page => {
+  assert.deepEqual(await batchTabs(page, 'MITO'), ['TISSUE', 'NEURO', 'METABOLIC', '']);
+});
+
+check('batch export with None turns tabs off for the whole batch', async page => {
+  assert.deepEqual(await batchTabs(page, ''), ['', '', '', '']);
+});
+
 // ── Runner ───────────────────────────────────────────────────
 
 (async () => {

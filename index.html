@@ -1797,7 +1797,10 @@ async function downloadBatch() {
     const name   = match ? match[1].trim() : entry;
     const dosage = match ? match[2].trim() : base.dosage;
     const batchNo = autoB ? randomBatch() : base.batchNo;
-    const vals   = { ...base, name, dosage, batchNo };
+    // Each entry gets its own Auto lookup; a forced or Custom word would land on
+    // every label in the batch. None still turns tabs off for the whole batch.
+    const categoryTab = base.categoryTab === '' ? '' : 'auto';
+    const vals   = { ...base, name, dosage, batchNo, categoryTab };
 
     const off  = new OffscreenCanvas(W, H);
     drawLabel(off.getContext('2d'), W, H, vals);
