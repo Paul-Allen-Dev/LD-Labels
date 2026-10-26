@@ -60,6 +60,34 @@ check('resolveCategory maps every live product', async page => {
   assert.deepEqual(got, EXPECTED);
 });
 
+// ── Control ──────────────────────────────────────────────────
+
+check('Auto option shows the detected word', async page => {
+  const autoText = () => page.$eval('#categoryTab option[value="auto"]', o => o.textContent);
+  await setFields(page, { peptideName: 'BPC-157' });
+  assert.equal(await autoText(), 'Auto (TISSUE)');
+  await setFields(page, { peptideName: 'Something New' });
+  assert.equal(await autoText(), 'Auto (none found)');
+});
+
+check('tabWordFor honours Auto, forced, None and Custom', async page => {
+  const got = await page.evaluate(() => [
+    tabWordFor({ name: 'Semax', categoryTab: 'auto',   categoryCustom: '' }),
+    tabWordFor({ name: 'Semax', categoryTab: 'MITO',   categoryCustom: '' }),
+    tabWordFor({ name: 'Semax', categoryTab: '',       categoryCustom: '' }),
+    tabWordFor({ name: 'Semax', categoryTab: 'custom', categoryCustom: 'solvent' }),
+  ]);
+  assert.deepEqual(got, ['NEURO', 'MITO', '', 'SOLVENT']);
+});
+
+check('Custom text box only shows for Custom', async page => {
+  const shown = () => page.$eval('#categoryCustom', el => el.style.display);
+  await setFields(page, { categoryTab: 'custom' });
+  assert.equal(await shown(), 'block');
+  await setFields(page, { categoryTab: 'auto' });
+  assert.equal(await shown(), 'none');
+});
+
 // ── Runner ───────────────────────────────────────────────────
 
 (async () => {

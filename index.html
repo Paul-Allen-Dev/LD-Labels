@@ -204,6 +204,22 @@
           <input type="text" id="storage" value="2°C–8°C" placeholder="e.g. 2°C–8°C" maxlength="14"/>
         </div>
       </div>
+
+      <div class="field">
+        <label>Category Tab <span style="font-size:0.72rem;color:var(--muted)">— Category Tab style only</span></label>
+        <select id="categoryTab">
+          <option value="auto">Auto</option>
+          <option value="TISSUE">TISSUE</option>
+          <option value="GH AXIS">GH AXIS</option>
+          <option value="METABOLIC">METABOLIC</option>
+          <option value="NEURO">NEURO</option>
+          <option value="MITO">MITO</option>
+          <option value="MELANO">MELANO</option>
+          <option value="">None</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <input type="text" id="categoryCustom" placeholder="e.g. SOLVENT" maxlength="10" style="display:none;margin-top:8px"/>
+      </div>
     </div>
 
     <!-- Label Style -->
@@ -405,6 +421,8 @@ function getValues() {
     inverted:   document.getElementById('invertMode').checked,
     frame:      document.getElementById('frameStyle').value,
     brandIcon:  document.getElementById('brandIcon').value,
+    categoryTab:    document.getElementById('categoryTab').value,
+    categoryCustom: document.getElementById('categoryCustom').value.trim(),
     nameFontOverride:       parseInt(document.getElementById('nameFontSize').value)       || 0,
     brandFontOverride:      parseInt(document.getElementById('brandFontSize').value)      || 0,
     disclaimerFontOverride: parseInt(document.getElementById('disclaimerFontSize').value) || 0,
@@ -1418,6 +1436,14 @@ function resolveCategory(name) {
   return hits.length === 1 ? hits[0] : '';
 }
 
+// Tab word to draw for one label: Auto resolves from the name; a forced word,
+// None ('') or Custom overrides it.
+function tabWordFor(vals) {
+  if (vals.categoryTab === 'auto')   return resolveCategory(vals.name);
+  if (vals.categoryTab === 'custom') return vals.categoryCustom.toUpperCase();
+  return vals.categoryTab;
+}
+
 // Converts every pixel to pure black or white — strips anti-aliased grey fringes
 // so thermal printer gets clean binary input instead of dithering grey blobs.
 function binarizeCanvas(canvas) {
@@ -1455,6 +1481,10 @@ function toggleAutoBatch() {
 
 function render() {
   const vals = getValues();
+  document.querySelector('#categoryTab option[value="auto"]').textContent =
+    `Auto (${resolveCategory(vals.name) || 'none found'})`;
+  document.getElementById('categoryCustom').style.display =
+    vals.categoryTab === 'custom' ? 'block' : 'none';
   // Preview shows a sample batch number when auto mode is on
   if (document.getElementById('autoBatch').checked) {
     vals.batchNo = 'BN-' + new Date().toISOString().slice(2,8).replace(/-/g,'') + '-' + '47';
