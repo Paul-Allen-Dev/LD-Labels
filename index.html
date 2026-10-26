@@ -215,9 +215,11 @@
           <option value="centered">Centered — symmetric, no stripe</option>
           <option value="left">Left-Aligned — utility, largest name</option>
           <option value="ruled">Ruled Frame — inner border + brand mark</option>
+          <option value="ruled2">Ruled Frame v2 — fills full height, frame + icon options</option>
+          <option value="left2">Left-Aligned v2 — fills full height, frame option</option>
         </select>
       </div>
-      <div class="info-note">Pick a style, then compare — all four export the same way. <strong>Left accent stripe</strong> below only applies to Classic; the other three ignore it and use the full width instead.</div>
+      <div class="info-note">Pick a style, then compare — all of them export the same way. <strong>Left accent stripe</strong> below only applies to Classic; the other styles ignore it and use the full width instead.</div>
     </div>
 
     <!-- Style -->
@@ -259,6 +261,22 @@
       <div class="toggle-row">
         <span class="toggle-label">Thermal sharpen on download <span style="font-size:0.72rem;color:var(--muted)">(strips anti-alias grey)</span></span>
         <label class="toggle"><input type="checkbox" id="thermalSharpen" checked/><span class="slider"></span></label>
+      </div>
+
+      <div class="field" style="margin-top:0.9rem">
+        <label>Frame <span style="font-size:0.72rem;color:var(--muted)">— v2 styles only</span></label>
+        <select id="frameStyle">
+          <option value="default">Style default — Ruled: double border, others: single</option>
+          <option value="rails">Top &amp; bottom rails — hides left/right print drift</option>
+          <option value="none">None</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Brand Icon <span style="font-size:0.72rem;color:var(--muted)">— Ruled Frame v2 only</span></label>
+        <select id="brandIcon">
+          <option value="atom">Atom — matches site logo (print weight)</option>
+          <option value="vial">Vial — original</option>
+        </select>
       </div>
 
       <div class="divider"></div>
@@ -319,7 +337,7 @@
         <canvas id="preview" width="1280" height="640"></canvas>
       </div>
       <div class="info-note">
-        In Niimbot app: import PNG → stretch until the outer border meets the label edge.
+        In Niimbot app: import PNG → stretch until the outer border (or the rails' ends) meets the label edge.
         Ratio is 2:1 — it won't distort.
       </div>
     </div>
@@ -385,6 +403,8 @@ function getValues() {
     pillBorder: document.getElementById('pillBorder').checked,
     showRules:  document.getElementById('showRules').checked,
     inverted:   document.getElementById('invertMode').checked,
+    frame:      document.getElementById('frameStyle').value,
+    brandIcon:  document.getElementById('brandIcon').value,
     nameFontOverride:       parseInt(document.getElementById('nameFontSize').value)       || 0,
     brandFontOverride:      parseInt(document.getElementById('brandFontSize').value)      || 0,
     disclaimerFontOverride: parseInt(document.getElementById('disclaimerFontSize').value) || 0,
@@ -403,6 +423,8 @@ function drawLabel(cx, cW, cH, vals) {
     case 'centered': return drawCentered(cx, cW, cH, vals);
     case 'left':     return drawLeftAligned(cx, cW, cH, vals);
     case 'ruled':    return drawRuledFrame(cx, cW, cH, vals);
+    case 'left2':    return drawLeftAlignedV2(cx, cW, cH, vals);
+    case 'ruled2':   return drawRuledFrameV2(cx, cW, cH, vals);
     default:         return drawClassic(cx, cW, cH, vals);
   }
 }
@@ -976,6 +998,398 @@ function drawRuledFrame(cx, cW, cH, vals) {
       cx.font = `bold ${mSize}px Arial, sans-serif`;
     }
     cx.fillStyle = vals.inverted ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+    cx.textAlign = 'left';
+    cx.textBaseline = 'top';
+    cx.fillText(batchTxt, padX, cursorY);
+  }
+}
+
+// Edge treatment for the v2 styles. 'single'/'double' match the original styles'
+// borders. Any vertical line hugging the label edge exposes the M2's left/right
+// feed drift (one side's gap printing visibly wider than the other), so 'rails'
+// draws only top + bottom rules that run off both edges — nothing to misalign.
+function drawFrame(cx, cW, cH, vals, FG, styleDefault) {
+  const s    = n => Math.round(n * (cW / W));
+  const mode = vals.frame === 'default' ? styleDefault : vals.frame;
+  cx.strokeStyle = FG;
+  cx.fillStyle   = FG;
+  if (mode === 'single' || mode === 'double') {
+    cx.lineWidth = s(7);
+    cx.strokeRect(s(4), s(4), cW - s(8), cH - s(8));
+  }
+  if (mode === 'double') {
+    cx.lineWidth = s(3);
+    cx.strokeRect(s(16), s(16), cW - s(32), cH - s(32));
+  }
+  if (mode === 'rails') {
+    cx.fillRect(0, s(10), cW, s(6));
+    cx.fillRect(0, cH - s(16), cW, s(6));
+  }
+}
+
+// Print-weight version of the site's atom mark (NavMark.tsx / favicon.svg): same
+// 24-unit crossed-orbit geometry, but solid rings at a heavier weight — the site's
+// gradient 1.35 stroke would break up or vanish on a monochrome thermal print — and
+// slightly wider orbits / smaller nucleus so the gaps around the nucleus stay open.
+function drawAtomIcon(cx, x, y, size, color) {
+  const u = size / 24;
+  cx.save();
+  cx.strokeStyle = color;
+  cx.fillStyle   = color;
+  cx.lineWidth   = 1.8 * u;
+  for (const deg of [0, 60, 120]) {
+    cx.beginPath();
+    cx.ellipse(x + 12 * u, y + 12 * u, 9.8 * u, 4.3 * u, deg * Math.PI / 180, 0, Math.PI * 2);
+    cx.stroke();
+  }
+  cx.beginPath();
+  cx.arc(x + 12 * u, y + 12 * u, 2.1 * u, 0, Math.PI * 2);
+  cx.fill();
+  cx.restore();
+}
+
+// The v2 styles measure every row before drawing anything, then
+// share the spare height out between the gaps. With fixed gaps, about a quarter
+// of the label printed blank at the bottom. Each gap is [minimum, weight]: the
+// spare height goes mostly around the name, so the rule stays attached to the
+// fine rows instead of floating. Returns a function handing the gaps out in order.
+function gapDealer(gaps, used, available) {
+  const totalW = gaps.reduce((a, g) => a + g[1], 0);
+  const unit = Math.max(0, available - used) / totalW;
+  let i = 0;
+  return () => { const [min, w] = gaps[i++]; return Math.round(min + w * unit); };
+}
+
+// ── Style: Left-Aligned v2 — Left-Aligned, filled to full height, Frame option ──
+function drawLeftAlignedV2(cx, cW, cH, vals) {
+  const s    = n => Math.round(n * (cW / W));
+  const BG   = vals.inverted ? '#000000' : '#ffffff';
+  const FG   = vals.inverted ? '#ffffff' : '#000000';
+  const META = vals.inverted ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+
+  cx.fillStyle = BG;
+  cx.fillRect(0, 0, cW, cH);
+  drawFrame(cx, cW, cH, vals, FG, 'single');
+
+  const padX   = s(40);
+  const safeW  = cW - padX * 2;
+  const top    = s(28);
+  const bottom = cH - s(32);
+
+  // ── Measure ──────────────────────────────────────────────
+  // Kicker (brand)
+  let kSize = vals.brandFontOverride > 0 ? s(vals.brandFontOverride) : s(44);
+  cx.font = `bold ${kSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.brand).width > safeW && kSize > s(20)) {
+    kSize -= s(2);
+    cx.font = `bold ${kSize}px Arial, sans-serif`;
+  }
+  cx.textBaseline = 'top';
+  const kickerH = cx.measureText(vals.brand).actualBoundingBoxDescent;
+
+  // Hero: name + pill
+  const showPill = vals.showPill && vals.dosage.length > 0;
+  const HERO_H = s(250);
+  let pillW = 0, pillH = 0;
+  if (showPill) {
+    pillH = Math.round(HERO_H * 0.6);
+    let pFSize = Math.round(pillH * 0.56);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > s(220) && pFSize > s(22)) {
+      pFSize -= s(3);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    pillW = cx.measureText(vals.dosage).width + s(36);
+  }
+  const gap = showPill ? s(16) : 0;
+  const nameMaxW = safeW - pillW - gap;
+  let nSize = vals.nameFontOverride > 0 ? s(vals.nameFontOverride) : s(220);
+  cx.font = `bold ${nSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.name).width > nameMaxW && nSize > s(46)) {
+    nSize -= s(4);
+    cx.font = `bold ${nSize}px Arial, sans-serif`;
+  }
+  cx.textBaseline = 'middle';
+  const nm = cx.measureText(vals.name);
+  const nameW    = nm.width;
+  const heroUp   = Math.max(nm.actualBoundingBoxAscent,  pillH / 2);
+  const heroDown = Math.max(nm.actualBoundingBoxDescent, pillH / 2);
+
+  // Fine row 1: disclaimer (left) + storage (right)
+  let stSize = vals.metaFontOverride > 0 ? s(vals.metaFontOverride) : s(52), storageW = 0;
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.storage).width > safeW * 0.34 && stSize > s(24)) {
+      stSize -= s(2);
+      cx.font = `bold ${stSize}px Arial, sans-serif`;
+    }
+    storageW = cx.measureText(vals.storage).width + s(16);
+  }
+  let dSize = vals.disclaimerFontOverride > 0 ? s(vals.disclaimerFontOverride) : s(56);
+  cx.font = `bold ${dSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.disclaimer).width > safeW - storageW && dSize > s(24)) {
+    dSize -= s(2);
+    cx.font = `bold ${dSize}px Arial, sans-serif`;
+  }
+  cx.textBaseline = 'top';
+  const stOffset = Math.round((dSize - stSize) / 2);
+  let fine1H = cx.measureText(vals.disclaimer).actualBoundingBoxDescent;
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    fine1H = Math.max(fine1H, stOffset + cx.measureText(vals.storage).actualBoundingBoxDescent);
+  }
+
+  // Fine row 2: batch
+  const batchTxt = `Batch: ${vals.batchNo}`;
+  let mSize = vals.metaFontOverride > 0 ? s(vals.metaFontOverride) : s(40), batchH = 0;
+  if (vals.batchNo) {
+    cx.font = `bold ${mSize}px Arial, sans-serif`;
+    while (cx.measureText(batchTxt).width > safeW && mSize > s(20)) {
+      mSize -= s(2);
+      cx.font = `bold ${mSize}px Arial, sans-serif`;
+    }
+    batchH = cx.measureText(batchTxt).actualBoundingBoxDescent;
+  }
+
+  const ruleH = vals.showRules ? s(4) : 0;
+  const gaps = [[s(20), 1]];                          // kicker → hero
+  if (vals.showRules) gaps.push([s(18), 1], [s(14), 0.3]);  // hero → rule → disclaimer
+  else gaps.push([s(24), 1.3]);                       // hero → disclaimer
+  if (vals.batchNo) gaps.push([s(12), 0.3]);            // disclaimer → batch
+  const used = kickerH + heroUp + heroDown + ruleH + fine1H + batchH + gaps.reduce((a, g) => a + g[0], 0);
+  const nextGap = gapDealer(gaps, used, bottom - top);
+
+  // ── Draw ─────────────────────────────────────────────────
+  let cursorY = top;
+  cx.font = `bold ${kSize}px Arial, sans-serif`;
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'top';
+  cx.fillText(vals.brand, padX, cursorY);
+  cursorY += kickerH + nextGap();
+
+  const heroMidY = cursorY + heroUp;
+  cx.font = `bold ${nSize}px Arial, sans-serif`;
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'middle';
+  cx.fillText(vals.name, padX, heroMidY);
+
+  if (showPill) {
+    const pillX = padX + nameW + gap;
+    const pillY = heroMidY - pillH / 2;
+    cx.fillStyle = vals.pillColor;
+    roundRect(cx, pillX, pillY, pillW, pillH, s(20));
+    if (vals.pillBorder) strokePill(cx, pillX, pillY, pillW, pillH, s(20), FG, s(4));
+    let pFSize = Math.round(pillH * 0.54);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > pillW - s(18) && pFSize > s(18)) {
+      pFSize -= s(2);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    cx.fillStyle = pillTextColor(vals.pillColor);
+    cx.textAlign = 'center';
+    cx.textBaseline = 'middle';
+    cx.fillText(vals.dosage, pillX + pillW / 2, heroMidY);
+  }
+
+  cursorY = heroMidY + heroDown + nextGap();
+
+  if (vals.showRules) {
+    cx.fillStyle = FG;
+    cx.fillRect(padX, cursorY, safeW, ruleH);
+    cursorY += ruleH + nextGap();
+  }
+
+  cx.font = `bold ${dSize}px Arial, sans-serif`;
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'top';
+  cx.fillText(vals.disclaimer, padX, cursorY);
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    cx.fillStyle = META;
+    cx.textAlign = 'right';
+    cx.textBaseline = 'top';
+    cx.fillText(vals.storage, padX + safeW, cursorY + stOffset);
+  }
+
+  if (vals.batchNo) {
+    cursorY += fine1H + nextGap();
+    cx.font = `bold ${mSize}px Arial, sans-serif`;
+    cx.fillStyle = META;
+    cx.textAlign = 'left';
+    cx.textBaseline = 'top';
+    cx.fillText(batchTxt, padX, cursorY);
+  }
+}
+
+// ── Style: Ruled Frame v2 — Ruled Frame, filled to full height, Frame + Brand Icon options ──
+function drawRuledFrameV2(cx, cW, cH, vals) {
+  const s    = n => Math.round(n * (cW / W));
+  const BG   = vals.inverted ? '#000000' : '#ffffff';
+  const FG   = vals.inverted ? '#ffffff' : '#000000';
+  const META = vals.inverted ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+
+  cx.fillStyle = BG;
+  cx.fillRect(0, 0, cW, cH);
+  drawFrame(cx, cW, cH, vals, FG, 'double');
+
+  const padX   = s(36);
+  const safeW  = cW - padX * 2;
+  const top    = s(32);
+  const bottom = cH - s(34);
+
+  // ── Measure ──────────────────────────────────────────────
+  // Kicker with icon — sized up so the glyph doesn't disappear at print size; the
+  // atom needs more room than the vial to keep the gaps between its rings open
+  const atom = vals.brandIcon === 'atom';
+  const iconSize = atom ? s(84) : s(60);
+  const kickerX = padX + iconSize + s(14);
+  const kickerMaxW = safeW - iconSize - s(14);
+  let kSize = vals.brandFontOverride > 0 ? s(vals.brandFontOverride) : s(56);
+  cx.font = `bold ${kSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.brand).width > kickerMaxW && kSize > s(18)) {
+    kSize -= s(2);
+    cx.font = `bold ${kSize}px Arial, sans-serif`;
+  }
+
+  // Hero: name + pill
+  const showPill = vals.showPill && vals.dosage.length > 0;
+  const HERO_H = s(220);
+  let pillW = 0, pillH = 0;
+  if (showPill) {
+    pillH = Math.round(HERO_H * 0.6);
+    let pFSize = Math.round(pillH * 0.56);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > s(200) && pFSize > s(20)) {
+      pFSize -= s(3);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    pillW = cx.measureText(vals.dosage).width + s(32);
+  }
+  const gap = showPill ? s(16) : 0;
+  const nameMaxW = safeW - pillW - gap;
+  let nSize = vals.nameFontOverride > 0 ? s(vals.nameFontOverride) : s(190);
+  cx.font = `bold ${nSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.name).width > nameMaxW && nSize > s(42)) {
+    nSize -= s(4);
+    cx.font = `bold ${nSize}px Arial, sans-serif`;
+  }
+  cx.textBaseline = 'middle';
+  const nm = cx.measureText(vals.name);
+  const nameW    = nm.width;
+  const heroUp   = Math.max(nm.actualBoundingBoxAscent,  pillH / 2);
+  const heroDown = Math.max(nm.actualBoundingBoxDescent, pillH / 2);
+
+  // Fine row 1: disclaimer + storage. Auto sizes bumped from 48/46 — the old
+  // defaults printed small next to the hero once the spare height went to gaps
+  let stSize = vals.metaFontOverride > 0 ? s(vals.metaFontOverride) : s(50), storageW = 0;
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.storage).width > safeW * 0.34 && stSize > s(22)) {
+      stSize -= s(2);
+      cx.font = `bold ${stSize}px Arial, sans-serif`;
+    }
+    storageW = cx.measureText(vals.storage).width + s(14);
+  }
+  let dSize = vals.disclaimerFontOverride > 0 ? s(vals.disclaimerFontOverride) : s(56);
+  cx.font = `bold ${dSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.disclaimer).width > safeW - storageW && dSize > s(22)) {
+    dSize -= s(2);
+    cx.font = `bold ${dSize}px Arial, sans-serif`;
+  }
+  cx.textBaseline = 'top';
+  const stOffset = Math.round((dSize - stSize) / 2);
+  let fine1H = cx.measureText(vals.disclaimer).actualBoundingBoxDescent;
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    fine1H = Math.max(fine1H, stOffset + cx.measureText(vals.storage).actualBoundingBoxDescent);
+  }
+
+  // Fine row 2: batch (auto size bumped from 36)
+  const batchTxt = `Batch: ${vals.batchNo}`;
+  let mSize = vals.metaFontOverride > 0 ? s(vals.metaFontOverride) : s(44), batchH = 0;
+  if (vals.batchNo) {
+    cx.font = `bold ${mSize}px Arial, sans-serif`;
+    while (cx.measureText(batchTxt).width > safeW && mSize > s(18)) {
+      mSize -= s(2);
+      cx.font = `bold ${mSize}px Arial, sans-serif`;
+    }
+    batchH = cx.measureText(batchTxt).actualBoundingBoxDescent;
+  }
+
+  const ruleH = vals.showRules ? s(4) : 0;
+  const gaps = [[s(20), 1]];                          // kicker → hero
+  if (vals.showRules) gaps.push([s(16), 1], [s(14), 0.3]);  // hero → rule → disclaimer
+  else gaps.push([s(22), 1.3]);                       // hero → disclaimer
+  if (vals.batchNo) gaps.push([s(12), 0.3]);            // disclaimer → batch
+  const used = iconSize + heroUp + heroDown + ruleH + fine1H + batchH + gaps.reduce((a, g) => a + g[0], 0);
+  const nextGap = gapDealer(gaps, used, bottom - top);
+
+  // ── Draw ─────────────────────────────────────────────────
+  let cursorY = top;
+  if (atom) drawAtomIcon(cx, padX, cursorY, iconSize, FG);
+  else      drawVialIcon(cx, padX, cursorY, iconSize, FG);
+  cx.font = `bold ${kSize}px Arial, sans-serif`;
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'middle';
+  cx.fillText(vals.brand, kickerX, cursorY + iconSize / 2);
+  cursorY += iconSize + nextGap();
+
+  const heroMidY = cursorY + heroUp;
+  cx.font = `bold ${nSize}px Arial, sans-serif`;
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'middle';
+  cx.fillText(vals.name, padX, heroMidY);
+
+  if (showPill) {
+    const pillX = padX + nameW + gap;
+    const pillY = heroMidY - pillH / 2;
+    cx.fillStyle = vals.pillColor;
+    roundRect(cx, pillX, pillY, pillW, pillH, s(18));
+    if (vals.pillBorder) strokePill(cx, pillX, pillY, pillW, pillH, s(18), FG, s(4));
+    let pFSize = Math.round(pillH * 0.54);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > pillW - s(16) && pFSize > s(16)) {
+      pFSize -= s(2);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    cx.fillStyle = pillTextColor(vals.pillColor);
+    cx.textAlign = 'center';
+    cx.textBaseline = 'middle';
+    cx.fillText(vals.dosage, pillX + pillW / 2, heroMidY);
+  }
+
+  cursorY = heroMidY + heroDown + nextGap();
+
+  if (vals.showRules) {
+    cx.fillStyle = FG;
+    cx.globalAlpha = 0.55;
+    cx.fillRect(padX, cursorY, safeW, ruleH);
+    cx.globalAlpha = 1;
+    cursorY += ruleH + nextGap();
+  }
+
+  cx.font = `bold ${dSize}px Arial, sans-serif`;
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'top';
+  cx.fillText(vals.disclaimer, padX, cursorY);
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    cx.fillStyle = META;
+    cx.textAlign = 'right';
+    cx.textBaseline = 'top';
+    cx.fillText(vals.storage, padX + safeW, cursorY + stOffset);
+  }
+
+  if (vals.batchNo) {
+    cursorY += fine1H + nextGap();
+    cx.font = `bold ${mSize}px Arial, sans-serif`;
+    cx.fillStyle = META;
     cx.textAlign = 'left';
     cx.textBaseline = 'top';
     cx.fillText(batchTxt, padX, cursorY);
