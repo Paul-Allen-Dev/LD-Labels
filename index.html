@@ -233,6 +233,7 @@
           <option value="ruled">Ruled Frame — inner border + brand mark</option>
           <option value="ruled2">Ruled Frame v2 — fills full height, frame + icon options</option>
           <option value="left2">Left-Aligned v2 — fills full height, frame option</option>
+          <option value="cattab">Category Tab — research-area tab + name band</option>
         </select>
       </div>
       <div class="info-note">Pick a style, then compare — all of them export the same way. <strong>Left accent stripe</strong> below only applies to Classic; the other styles ignore it and use the full width instead.</div>
@@ -443,6 +444,7 @@ function drawLabel(cx, cW, cH, vals) {
     case 'ruled':    return drawRuledFrame(cx, cW, cH, vals);
     case 'left2':    return drawLeftAlignedV2(cx, cW, cH, vals);
     case 'ruled2':   return drawRuledFrameV2(cx, cW, cH, vals);
+    case 'cattab':   return drawCategoryTab(cx, cW, cH, vals);
     default:         return drawClassic(cx, cW, cH, vals);
   }
 }
@@ -1443,6 +1445,221 @@ function tabWordFor(vals) {
   if (vals.categoryTab === 'custom') return vals.categoryCustom.toUpperCase();
   return vals.categoryTab;
 }
+
+// Tab strip: solid FG on the left edge, full height, with the word knocked out in
+// BG, reading bottom-to-top. Letters are spaced by hand because canvas
+// letterSpacing is missing on older iOS Safari, which is where labels get exported.
+function drawCategoryTabStrip(cx, cW, cH, word, tabW, FG, BG) {
+  const s = n => Math.round(n * (cW / W));
+  cx.fillStyle = FG;
+  cx.fillRect(0, 0, tabW, cH);
+
+  const maxLen  = cH - s(80);
+  const spacing = size => Math.round(size * 0.12);
+  const spacedWidth = size => {
+    cx.font = `bold ${size}px Arial, sans-serif`;
+    return [...word].reduce((w, ch) => w + cx.measureText(ch).width, 0) + spacing(size) * (word.length - 1);
+  };
+  let tSize = s(96);
+  while (spacedWidth(tSize) > maxLen && tSize > s(30)) tSize -= s(2);
+
+  const totalW = spacedWidth(tSize);   // also leaves cx.font at tSize
+  cx.textAlign = 'left';
+  cx.textBaseline = 'alphabetic';      // set before measuring: bounding boxes depend on it
+  const m = cx.measureText(word);
+  cx.save();
+  cx.translate(tabW / 2, cH / 2);
+  cx.rotate(-Math.PI / 2);
+  cx.fillStyle = BG;
+  // Centre the glyphs (not the em box) across the tab's width
+  const y = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2;
+  let x = -totalW / 2;
+  for (const ch of word) {
+    cx.fillText(ch, x, y);
+    x += cx.measureText(ch).width + spacing(tSize);
+  }
+  cx.restore();
+}
+
+// ── Style: Category Tab — research-area tab on the left edge + solid name band ──
+// Ruled Frame v2's measure-then-draw layout with fixed rails. The tab and band are
+// FG ink that run off the canvas edges, so like the rails they have no outer edge
+// for the M2's print drift to expose. Text on them is knocked out in BG.
+function drawCategoryTab(cx, cW, cH, vals) {
+  const s    = n => Math.round(n * (cW / W));
+  const BG   = vals.inverted ? '#000000' : '#ffffff';
+  const FG   = vals.inverted ? '#ffffff' : '#000000';
+  const META = vals.inverted ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+  const tabWord = tabWordFor(vals);
+  const TAB_W   = tabWord ? s(144) : 0;   // 4.5mm
+
+  cx.fillStyle = BG;
+  cx.fillRect(0, 0, cW, cH);
+  drawFrame(cx, cW, cH, { frame: 'rails' }, FG, 'rails');
+  if (tabWord) drawCategoryTabStrip(cx, cW, cH, tabWord, TAB_W, FG, BG);
+
+  const padX     = TAB_W + s(36);
+  const safeW    = cW - padX - s(36);
+  const top      = s(32);
+  const bottom   = cH - s(34);
+  const BAND_PAD = s(18);
+
+  // ── Measure ──────────────────────────────────────────────
+  // Kicker: atom + brand
+  const iconSize = s(84);
+  const kickerX = padX + iconSize + s(14);
+  const kickerMaxW = safeW - iconSize - s(14);
+  let kSize = vals.brandFontOverride > 0 ? s(vals.brandFontOverride) : s(56);
+  cx.font = `bold ${kSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.brand).width > kickerMaxW && kSize > s(18)) {
+    kSize -= s(2);
+    cx.font = `bold ${kSize}px Arial, sans-serif`;
+  }
+
+  // Hero: name + pill, sitting inside the band
+  const showPill = vals.showPill && vals.dosage.length > 0;
+  const HERO_H = s(220);
+  let pillW = 0, pillH = 0;
+  if (showPill) {
+    pillH = Math.round(HERO_H * 0.6);
+    let pFSize = Math.round(pillH * 0.56);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > s(200) && pFSize > s(20)) {
+      pFSize -= s(3);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    pillW = cx.measureText(vals.dosage).width + s(32);
+  }
+  const gap = showPill ? s(16) : 0;
+  const nameMaxW = safeW - pillW - gap;
+  let nSize = vals.nameFontOverride > 0 ? s(vals.nameFontOverride) : s(190);
+  cx.font = `bold ${nSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.name).width > nameMaxW && nSize > s(42)) {
+    nSize -= s(4);
+    cx.font = `bold ${nSize}px Arial, sans-serif`;
+  }
+  cx.textBaseline = 'middle';
+  const nm = cx.measureText(vals.name);
+  const nameW    = nm.width;
+  const heroUp   = Math.max(nm.actualBoundingBoxAscent,  pillH / 2);
+  const heroDown = Math.max(nm.actualBoundingBoxDescent, pillH / 2);
+  const bandH    = heroUp + heroDown + BAND_PAD * 2;
+
+  // Fine row 1: disclaimer + storage
+  let stSize = vals.metaFontOverride > 0 ? s(vals.metaFontOverride) : s(50), storageW = 0;
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.storage).width > safeW * 0.34 && stSize > s(22)) {
+      stSize -= s(2);
+      cx.font = `bold ${stSize}px Arial, sans-serif`;
+    }
+    storageW = cx.measureText(vals.storage).width + s(14);
+  }
+  let dSize = vals.disclaimerFontOverride > 0 ? s(vals.disclaimerFontOverride) : s(56);
+  cx.font = `bold ${dSize}px Arial, sans-serif`;
+  while (cx.measureText(vals.disclaimer).width > safeW - storageW && dSize > s(22)) {
+    dSize -= s(2);
+    cx.font = `bold ${dSize}px Arial, sans-serif`;
+  }
+  cx.textBaseline = 'top';
+  const stOffset = Math.round((dSize - stSize) / 2);
+  let fine1H = cx.measureText(vals.disclaimer).actualBoundingBoxDescent;
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    fine1H = Math.max(fine1H, stOffset + cx.measureText(vals.storage).actualBoundingBoxDescent);
+  }
+
+  // Fine row 2: batch
+  const batchTxt = `Batch: ${vals.batchNo}`;
+  let mSize = vals.metaFontOverride > 0 ? s(vals.metaFontOverride) : s(44), batchH = 0;
+  if (vals.batchNo) {
+    cx.font = `bold ${mSize}px Arial, sans-serif`;
+    while (cx.measureText(batchTxt).width > safeW && mSize > s(18)) {
+      mSize -= s(2);
+      cx.font = `bold ${mSize}px Arial, sans-serif`;
+    }
+    batchH = cx.measureText(batchTxt).actualBoundingBoxDescent;
+  }
+
+  const ruleH = vals.showRules ? s(4) : 0;
+  const gaps = [[s(20), 1]];                          // kicker → band
+  if (vals.showRules) gaps.push([s(16), 1], [s(14), 0.3]);  // band → rule → disclaimer
+  else gaps.push([s(22), 1.3]);                       // band → disclaimer
+  if (vals.batchNo) gaps.push([s(12), 0.3]);            // disclaimer → batch
+  const used = iconSize + bandH + ruleH + fine1H + batchH + gaps.reduce((a, g) => a + g[0], 0);
+  const nextGap = gapDealer(gaps, used, bottom - top);
+
+  // ── Draw ─────────────────────────────────────────────────
+  let cursorY = top;
+  drawAtomIcon(cx, padX, cursorY, iconSize, FG);
+  cx.font = `bold ${kSize}px Arial, sans-serif`;
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'middle';
+  cx.fillText(vals.brand, kickerX, cursorY + iconSize / 2);
+  cursorY += iconSize + nextGap();
+
+  // Band runs from the tab (or the canvas edge) off the right edge
+  cx.fillStyle = FG;
+  cx.fillRect(TAB_W, cursorY, cW - TAB_W, bandH);
+  const heroMidY = cursorY + BAND_PAD + heroUp;
+  cx.font = `bold ${nSize}px Arial, sans-serif`;
+  cx.fillStyle = BG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'middle';
+  cx.fillText(vals.name, padX, heroMidY);
+
+  if (showPill) {
+    // Inverted against the band; the pill colour/border settings don't apply here
+    const pillX = padX + nameW + gap;
+    const pillY = heroMidY - pillH / 2;
+    cx.fillStyle = BG;
+    roundRect(cx, pillX, pillY, pillW, pillH, s(18));
+    let pFSize = Math.round(pillH * 0.54);
+    cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    while (cx.measureText(vals.dosage).width > pillW - s(16) && pFSize > s(16)) {
+      pFSize -= s(2);
+      cx.font = `bold ${pFSize}px Arial, sans-serif`;
+    }
+    cx.fillStyle = FG;
+    cx.textAlign = 'center';
+    cx.textBaseline = 'middle';
+    cx.fillText(vals.dosage, pillX + pillW / 2, heroMidY);
+  }
+
+  cursorY += bandH + nextGap();
+
+  if (vals.showRules) {
+    cx.fillStyle = FG;
+    cx.globalAlpha = 0.55;
+    cx.fillRect(padX, cursorY, safeW, ruleH);
+    cx.globalAlpha = 1;
+    cursorY += ruleH + nextGap();
+  }
+
+  cx.font = `bold ${dSize}px Arial, sans-serif`;
+  cx.fillStyle = FG;
+  cx.textAlign = 'left';
+  cx.textBaseline = 'top';
+  cx.fillText(vals.disclaimer, padX, cursorY);
+  if (vals.storage) {
+    cx.font = `bold ${stSize}px Arial, sans-serif`;
+    cx.fillStyle = META;
+    cx.textAlign = 'right';
+    cx.textBaseline = 'top';
+    cx.fillText(vals.storage, padX + safeW, cursorY + stOffset);
+  }
+
+  if (vals.batchNo) {
+    cursorY += fine1H + nextGap();
+    cx.font = `bold ${mSize}px Arial, sans-serif`;
+    cx.fillStyle = META;
+    cx.textAlign = 'left';
+    cx.textBaseline = 'top';
+    cx.fillText(batchTxt, padX, cursorY);
+  }
+}
+
 
 // Converts every pixel to pure black or white — strips anti-aliased grey fringes
 // so thermal printer gets clean binary input instead of dithering grey blobs.

@@ -88,6 +88,52 @@ check('Custom text box only shows for Custom', async page => {
   assert.equal(await shown(), 'none');
 });
 
+// ── Style ────────────────────────────────────────────────────
+
+// Canvas is 1280×640; the tab is 144px wide. Non-inverted, so ink = dark, holo = light.
+const TAB_W = 144;
+
+check('every tab word fits inside its tab', async page => {
+  for (const [categoryTab, categoryCustom] of [
+    ['TISSUE', ''], ['GH AXIS', ''], ['METABOLIC', ''], ['NEURO', ''], ['MITO', ''], ['MELANO', ''],
+    ['custom', 'WWWWWWWWWW'],   // widest possible Custom word (10 chars)
+  ]) {
+    await setFields(page, { labelStyle: 'cattab', invertMode: false, categoryTab, categoryCustom });
+    const word = categoryCustom || categoryTab;
+    assert.equal((await countPx(page, 0, 0, TAB_W, 40)).light, 0, `${word} runs into the top margin`);
+    assert.equal((await countPx(page, 0, 600, TAB_W, 40)).light, 0, `${word} runs into the bottom margin`);
+    assert.equal((await countPx(page, 0, 0, 12, 640)).light, 0, `${word} touches the outer edge`);
+    assert.equal((await countPx(page, TAB_W - 12, 0, 12, 640)).light, 0, `${word} touches the inner edge`);
+    assert.ok((await countPx(page, 0, 40, TAB_W, 560)).light > 500, `${word} was not drawn`);
+  }
+});
+
+check('no tab: left edge is no longer solid ink', async page => {
+  await setFields(page, { labelStyle: 'cattab', invertMode: false, categoryTab: 'NEURO' });
+  assert.equal((await countPx(page, 0, 20, 20, 580)).light, 0, 'tab should be solid at the left edge');
+  await setFields(page, { categoryTab: '' });
+  const px = await countPx(page, 0, 20, 20, 580);
+  assert.ok(px.light > 0 && px.dark > 0, 'expected holographic background plus the name band at the left edge');
+});
+
+// Regression guard: passes before and after this task. It proves nothing
+// existing changed.
+check('original six styles render identically to the live version', async (page, browser) => {
+  const base = await browser.newPage();
+  await base.goto(BASELINE);
+  for (const labelStyle of ['classic', 'centered', 'left', 'ruled', 'ruled2', 'left2']) {
+    for (const invertMode of [true, false]) {
+      const f = { labelStyle, invertMode, peptideName: 'Retatrutide', dosage: '20mg', brandFontSize: '60' };
+      const [a, b] = await Promise.all([page, base].map(async p => {
+        await setFields(p, f);
+        return p.evaluate(() => document.getElementById('preview').toDataURL());
+      }));
+      assert.ok(a === b, `${labelStyle} inverted=${invertMode} differs from the live version`);
+    }
+  }
+  await base.close();
+});
+
 // ── Runner ───────────────────────────────────────────────────
 
 (async () => {
