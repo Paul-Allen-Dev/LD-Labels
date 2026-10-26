@@ -1396,6 +1396,28 @@ function drawRuledFrameV2(cx, cW, cH, vals) {
   }
 }
 
+// Research-area tab words for the Category Tab style. Groups mirror the storefront's
+// Find Your Fit research areas (src/data/researchAreas.ts), which are named by
+// mechanism, never by outcome; that's a compliance rule, not a style choice. Aliases
+// are matched against the normalized name (lowercase, a-z0-9 only) with `includes`.
+const CATEGORY_ALIASES = {
+  'TISSUE':    ['bpc157', 'tb500', 'ghkcu', 'kpv', 'klow', 'wolverine'],
+  'GH AXIS':   ['ipamorelin', 'cjc1295', 'cjc', 'tesamorelin'],
+  'METABOLIC': ['retatrutide'],
+  'NEURO':     ['semax', 'selank'],
+  'MITO':      ['nad', 'ss31', 'motsc'],
+  'MELANO':    ['melanotan', 'mt2', 'pt141'],
+};
+
+// The single tab word whose aliases appear in `name`. '' when nothing matches or
+// aliases from two different tab words match; it never guesses between categories.
+function resolveCategory(name) {
+  const n = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const hits = Object.keys(CATEGORY_ALIASES)
+    .filter(word => CATEGORY_ALIASES[word].some(alias => n.includes(alias)));
+  return hits.length === 1 ? hits[0] : '';
+}
+
 // Converts every pixel to pure black or white — strips anti-aliased grey fringes
 // so thermal printer gets clean binary input instead of dithering grey blobs.
 function binarizeCanvas(canvas) {
